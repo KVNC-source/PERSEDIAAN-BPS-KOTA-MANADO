@@ -1,83 +1,31 @@
-// File: main.js
-
-const { app, BrowserWindow } = require("electron");
-const { PythonShell } = require("python-shell");
+// main.js
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const isDev = process.env.NODE_ENV === "development";
 
-let mainWindow;
-let pythonProcess;
-
-function startPythonBackend() {
-  const scriptPath = path.join(__dirname, "backend", "api.py");
-
-  const options = {
-    mode: "text",
-    pythonOptions: ["-u"], // Unbuffered output
-    scriptPath: path.dirname(scriptPath),
-    args: [],
-  };
-
-  pythonProcess = PythonShell.run(
-    path.basename(scriptPath),
-    options,
-    (err, results) => {
-      if (err) {
-        console.error("Gagal menjalankan Python backend:", err);
-      }
-      if (results && isDev) {
-        console.log("Python output:", results);
-      }
-    }
-  );
-
-  console.log("Backend Python Flask dimulai di port 5000...");
-}
-
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+  const mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
     webPreferences: {
-      nodeIntegration: false,
+      nodeIntegration: true,
       contextIsolation: false,
-      webSecurity: false,
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, "frontend", "index.html"));
-
   if (isDev) {
+    // Memuat dari server Vite (port 5173) saat pengembangan
+    mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();
+  } else {
+    // Memuat dari build React saat produksi
+    mainWindow.loadFile(
+      path.join(__dirname, "frontend-react", "dist", "index.html")
+    );
   }
-
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
 }
 
-app.whenReady().then(() => {
-  startPythonBackend();
-  createWindow();
-});
+app.whenReady().then(createWindow);
 
-// Tutup proses Python saat aplikasi Electron ditutup
-app.on("will-quit", () => {
-  if (pythonProcess) {
-    // Mengirim sinyal SIGINT untuk menghentikan Flask secara graceful
-    pythonProcess.childProcess.kill("SIGINT");
-    console.log("Backend Python Flask dihentikan.");
-  }
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
-});
+// Tambahkan logika IPC dan PDF Printing di sini
+// ... (ipcMain.on('print-pdf-request', ...))

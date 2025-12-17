@@ -4,15 +4,28 @@
   "description": "Aplikasi Stock ATK/ARK menggunakan Electron dan Python/Flask",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "package": "electron-packager . ATK-Stock-Manager --overwrite --asar=true --platform=win32 --arch=x64 --icon=icon.ico --prune=true --out=release-builds --version-string.CompanyName=CE --version-string.FileDescription=CE --version-string.ProductName=\"ATK Stock Manager\""
+    "start-backend": "python backend/api.py",
+    "start-frontend": "npm run dev --prefix frontend-react",
+    "electron-dev": "wait-on tcp:5000 tcp:5173 && electron .",
+    "start": "concurrently --kill-others \"npm run start-backend\" \"npm run start-frontend\" \"cross-env NODE_ENV=development npm run electron-dev\"",
+    "build-frontend": "npm run build --prefix frontend-react",
+    "package": "npm run build-frontend && electron-packager . ATK-Stock-Manager --overwrite --asar=true --platform=win32 --arch=x64 --icon=icon.ico --prune=true --out=release-builds --version-string.CompanyName=CE --version-string.FileDescription=CE --version-string.ProductName=\"ATK Stock Manager\""
   },
-  "keywords": [],
+  "keywords": [
+    "electron",
+    "react",
+    "python",
+    "flask"
+  ],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  },
   "devDependencies": {
-    "electron": "^39.2.7",
-    "electron-packager": "^17.1.2",
-    "python-shell": "^5.0.0"
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.2",
+    "electron-packager": "^17.1.2"
   }
 }

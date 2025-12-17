@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 import sys
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import Table, TableStyle
@@ -13,6 +14,7 @@ from reportlab.lib import colors
 
 # --- KONFIGURASI DAN INIT ---
 app = Flask(__name__)
+CORS(app) 
 
 # Tentukan path DB dan Data
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,13 +22,14 @@ DATABASE_NAME = 'stock_db.sqlite'
 DB_PATH = os.path.join(BASE_DIR, DATABASE_NAME)
 PDF_OUTPUT_DIR = os.path.join(BASE_DIR, '..', 'Pengeluaran_PDF')
 
-# *** PATH DIKOREKSI UNTUK FOLDER DB/ ***
+# *** CORRECTED PATHS ***
 DATA_DIR = os.path.join(BASE_DIR, 'DB')
 
-CSV_FILES = {
-    'barang_atk': os.path.join(DATA_DIR, 'Book1.xlsx - Sheet1.csv'),
-    'pegawai': os.path.join(DATA_DIR, 'Book2.xlsx - Sheet1.csv'),
-    'stock': os.path.join(DATA_DIR, 'Book3.xlsx - Sheet1.csv')
+# --- CHANGED: Use .xlsx extension and removed '- Sheet1.csv' suffix ---
+EXCEL_FILES = {
+    'barang_atk': os.path.join(DATA_DIR, 'Book1.xlsx'),
+    'pegawai': os.path.join(DATA_DIR, 'Book2.xlsx'),
+    'stock': os.path.join(DATA_DIR, 'Book3.xlsx')
 }
 
 def get_db_connection():
@@ -35,43 +38,45 @@ def get_db_connection():
     return conn
 
 def init_db_and_load_data():
-    """Membuat skema dan mengisi data dari CSV jika database kosong."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # 1. Buat Skema
-    cursor.executescript("""
-        CREATE TABLE IF NOT EXISTS pegawai (id_pegawai INTEGER PRIMARY KEY, nama_pegawai TEXT NOT NULL UNIQUE);
-        CREATE TABLE IF NOT EXISTS barang_atk (id_barang INTEGER PRIMARY KEY, kode_barang TEXT, nama_barang_sakti TEXT, nama_barang TEXT NOT NULL, kategori TEXT, satuan TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS stock (id_barang INTEGER PRIMARY KEY, jumlah_tersedia INTEGER NOT NULL, FOREIGN KEY (id_barang) REFERENCES barang_atk(id_barang));
-        CREATE TABLE IF NOT EXISTS pengeluaran (id INTEGER PRIMARY KEY, no_bukti_full TEXT NOT NULL UNIQUE, tanggal_pengeluaran DATE NOT NULL, pegawai_id INTEGER NOT NULL, FOREIGN KEY (pegawai_id) REFERENCES pegawai(id_pegawai));
-        CREATE TABLE IF NOT EXISTS detail_pengeluaran (id INTEGER PRIMARY KEY, pengeluaran_id INTEGER NOT NULL, barang_atk_id INTEGER NOT NULL, jumlah_keluar INTEGER NOT NULL, FOREIGN KEY (pengeluaran_id) REFERENCES pengeluaran(id), FOREIGN KEY (barang_atk_id) REFERENCES barang_atk(id_barang));
-    """)
-    conn.commit()
-
-    # 2. Cek apakah sudah terisi data
-    count = cursor.execute("SELECT COUNT(*) FROM pegawai").fetchone()[0]
-    if count > 0:
-        conn.close()
-        return
-
-    print("--- Memuat data dari file CSV (Langkah Inisialisasi) ---")
+    """Membuat skema dan mengisi data dari Excel jika database kosong."""
+    conn = None 
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 1. Buat Skema (Schema creation remains the same)
+        cursor.executescript("""
+            CREATE TABLE IF NOT EXISTS pegawai (id_pegawai INTEGER PRIMARY KEY, nama_pegawai TEXT NOT NULL UNIQUE);
+            CREATE TABLE IF NOT EXISTS barang_atk (id_barang INTEGER PRIMARY KEY, kode_barang TEXT, nama_barang_sakti TEXT, nama_barang TEXT NOT NULL, kategori TEXT, satuan TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS stock (id_barang INTEGER PRIMARY KEY, jumlah_tersedia INTEGER NOT NULL, FOREIGN KEY (id_barang) REFERENCES barang_atk(id_barang));
+            CREATE TABLE IF NOT EXISTS pengeluaran (id INTEGER PRIMARY KEY, no_bukti_full TEXT NOT NULL UNIQUE, tanggal_pengeluaran DATE NOT NULL, pegawai_id INTEGER NOT NULL, FOREIGN KEY (pegawai_id) REFERENCES pegawai(id_pegawai));
+            CREATE TABLE IF NOT EXISTS detail_pengeluaran (id INTEGER PRIMARY KEY, pengeluaran_id INTEGER NOT NULL, barang_atk_id INTEGER NOT NULL, jumlah_keluar INTEGER NOT NULL, FOREIGN KEY (pengeluaran_id) REFERENCES pengeluaran(id), FOREIGN KEY (barang_atk_id) REFERENCES barang_atk(id_barang));
+        """)
+        conn.commit()
+
+        # 2. Cek apakah sudah terisi data
+        count = cursor.execute("SELECT COUNT(*) FROM pegawai").fetchone()[0]
+        if count > 0:
+            print("Database sudah terisi. Melewati inisialisasi data.")
+            return
+
+        print("--- Memuat data dari file Excel (Langkah Inisialisasi) ---")
+        
         # --- Load Pegawai (Book2) ---
-        df_pegawai = pd.read_csv(CSV_FILES['pegawai'])
+        # CHANGED: pd.read_csv -> pd.read_excel
+        df_pegawai = pd.read_excel(EXCEL_FILES['pegawai'], header=None) 
         
-        # Koreksi: Menggunakan baris pertama sebagai data, bukan header
-        # Baris pertama adalah header "All", kita ganti nama kolom & buang baris "All"
-        df_pegawai.columns = ['nama_pegawai'] 
-        df_pegawai = df_pegawai.iloc[1:].copy() 
-        
+        # We need to manually set column names and skip the first 'All' row
+        df_pegawai.columns = ['nama_pegawai'] + [f'col_{i}' for i in range(1, len(df_pegawai.columns))]
+        df_pegawai = df_pegawai[['nama_pegawai']].iloc[1:].copy() 
         df_pegawai['id_pegawai'] = df_pegawai.reset_index(drop=True).index + 1
         pegawai_data = df_pegawai[['id_pegawai', 'nama_pegawai']].to_dict('records')
         conn.executemany("INSERT INTO pegawai (id_pegawai, nama_pegawai) VALUES (?, ?)", 
                            [(r['id_pegawai'], r['nama_pegawai']) for r in pegawai_data])
 
         # --- Load Barang ATK (Master List - Book1) ---
-        df_barang_atk = pd.read_csv(CSV_FILES['barang_atk'])
+        # CHANGED: pd.read_csv -> pd.read_excel
+        df_barang_atk = pd.read_excel(EXCEL_FILES['barang_atk'])
         df_barang_atk.rename(columns={
             'Kode Barang': 'kode_barang', 'Nama Barang di SAKTI': 'nama_barang_sakti', 
             'Nama Barang': 'nama_barang', 'Kategori': 'kategori', 'Satuan': 'satuan'
@@ -86,8 +91,10 @@ def init_db_and_load_data():
         """, barang_data_tuples)
 
         # --- Load Stock (Current Qty - Book3) ---
-        df_stock_data = pd.read_csv(CSV_FILES['stock'])
+        # CHANGED: pd.read_csv -> pd.read_excel
+        df_stock_data = pd.read_excel(EXCEL_FILES['stock'])
         df_stock_data.rename(columns={'Nama Barang': 'nama_barang', 'Tersedia': 'jumlah_tersedia'}, inplace=True)
+        # Handle potential non-numeric data in 'Tersedia' column
         df_stock_data['jumlah_tersedia'] = pd.to_numeric(df_stock_data['jumlah_tersedia'], errors='coerce').fillna(0).astype(int)
         
         # Merge by nama_barang to link IDs
@@ -103,21 +110,21 @@ def init_db_and_load_data():
                            stock_data_tuples)
 
         conn.commit()
-        print("Data berhasil dimuat dan database siap.")
+        print("✅ Data berhasil dimuat dan database siap.")
 
     except FileNotFoundError as e:
-        print(f"Error File: File CSV tidak ditemukan: {e}. Pastikan file ada di folder 'DB'.", file=sys.stderr)
-        conn.rollback()
+        print(f"❌ Error File: File tidak ditemukan: {e}. Pastikan file ada di folder 'DB' dengan ekstensi yang benar.", file=sys.stderr)
+        if conn: conn.rollback()
     except Exception as e:
-        print(f"Error saat memuat data: {e}", file=sys.stderr)
-        conn.rollback()
+        print(f"❌ Error saat memuat data: {e}", file=sys.stderr)
+        if conn: conn.rollback()
     finally:
-        conn.close()
+        if conn: conn.close()
 
 init_db_and_load_data()
 
 
-# --- LOGIKA APLIKASI (Sama seperti sebelumnya, handling PDF diubah sedikit) ---
+# --- LOGIKA APLIKASI (Rest of API routes unchanged) ---
 
 def generate_no_bukti():
     conn = get_db_connection()
@@ -129,7 +136,7 @@ def generate_no_bukti():
 def create_pdf_form(no_bukti, tanggal, nama_pegawai, items_withdrawn):
     """Membuat formulir PDF pengeluaran dan menyimpannya di Pengeluaran_PDF/."""
     os.makedirs(PDF_OUTPUT_DIR, exist_ok=True)
-    pdf_filename = f'FORM_PENGAMBILAN_{no_bukti}_{tanggal}.pdf'
+    pdf_filename = f'FORM_PENGAMBILAN_{no_bukti}_{datetime.now().strftime("%Y%m%d")}.pdf' 
     save_path = os.path.join(PDF_OUTPUT_DIR, pdf_filename)
 
     # --- REPORTLAB CODE ---

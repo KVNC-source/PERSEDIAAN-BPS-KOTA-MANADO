@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pengeluaran ATK/ARK</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Form Pengeluaran Stok ATK/ARK</h1>
+      <div class="controls">
+        <label for="pegawai-select">Pegawai (Yang Mengambil):</label>
+        <select id="pegawai-select"></select>
+      </div>
+
+      <h2>Daftar Stok Tersedia</h2>
+      <div class="stock-list-container">
+        <div class="stock-list-header">
+          <span class="col-name">Nama Barang (Satuan)</span>
+          <span class="col-stock">Stok</span>
+          <span class="col-qty">Ambil</span>
+        </div>
+        <div id="stock-list"></div>
+      </div>
+
+      <button id="withdraw-btn">Catat Pengeluaran & Cetak PDF</button>
+
+      <div id="message" class="message"></div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
